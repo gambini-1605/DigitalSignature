@@ -11,7 +11,6 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace DigitalSignature
@@ -119,17 +118,16 @@ namespace DigitalSignature
             try
             {
 
-                //if(rbTokenUSB.Checked)
-                //{
+                if (rbTokenUSB.Checked)
+                {
 
-                //}
+                }
 
-                //if(rbArchivoPfx.Checked)
-                //{
-
-                //}
-
-
+                if (rbArchivoPfx.Checked)
+                {
+                    MostrarFilasSeleccionadas();
+                }
+                return;
 
                 // Validar si la grilla tiene elementos
                 if (dgvDocumentos.Rows.Count == 0)
@@ -192,15 +190,16 @@ namespace DigitalSignature
             }
         }
 
-        private void FirmaContrasenia()
+        private void FirmaContrasenia(string fullPath, string signedFullPath)
         {
             try
             {
-                string pdfFilePath = "C:\\Users\\USUARIO\\Downloads\\FirmaDigital_Desa-20260925T155354Z-1-001\\FirmaDigital_Desa\\Certificado\\documento_demo.pdf";
-                PdfReader pdfReader = new PdfReader(pdfFilePath);
+                //string pdfFilePath = "C:\\Users\\USUARIO\\Downloads\\FirmaDigital_Desa-20260925T155354Z-1-001\\FirmaDigital_Desa\\Certificado\\documento_demo.pdf";
+                PdfReader pdfReader = new PdfReader(fullPath);
 
                 string pfxFilePath = "C:\\Users\\USUARIO\\Downloads\\FirmaDigital_Desa-20260925T155354Z-1-001\\FirmaDigital_Desa\\2026\\clVtZzM5ZnZHbFFhYVc0Nw==.p12";
                 string pfxPassword = "7uXSmFJsyq+o[+tJ";
+
                 //Pkcs12Store pfxKeyStore = new Pkcs12Store(new FileStream(pfxFilePath, FileMode.Open, FileAccess.Read), pfxPassword.ToCharArray());
                 Org.BouncyCastle.Pkcs.Pkcs12Store pfxKeyStore = new Org.BouncyCastle.Pkcs.Pkcs12StoreBuilder().Build();
 
@@ -208,7 +207,7 @@ namespace DigitalSignature
                 {
                     pfxKeyStore.Load(stream, pfxPassword.ToCharArray());
 
-                    PdfStamper pdfStamper = PdfStamper.CreateSignature(pdfReader, new FileStream("C:\\Users\\USUARIO\\Downloads\\FirmaDigital_Desa-20260925T155354Z-1-001\\FirmaDigital_Desa\\Certificado\\MyPDF_SignedMG.pdf", FileMode.Create), '\0', null, true);
+                    PdfStamper pdfStamper = PdfStamper.CreateSignature(pdfReader, new FileStream(signedFullPath, FileMode.Create), '\0', null, true);
 
                     PdfSignatureAppearance signatureAppearance = pdfStamper.SignatureAppearance;
                     signatureAppearance.Reason = "Digital Signature Reason";
@@ -245,7 +244,6 @@ namespace DigitalSignature
 
                 } // 
 
-
                 pdfReader.Close();
                 pdfReader = null;
 
@@ -274,6 +272,68 @@ namespace DigitalSignature
         private void btnActualizar_Click(object sender, EventArgs e)
         {
             CargarGrilla();
+        }
+
+        private void MostrarFilasSeleccionadas()
+        {
+            try
+            {
+                var filasSeleccionadas = new List<DataGridViewRow>();
+
+                // Recorremos todas las filas de la grilla para verificar el estado del CheckBox
+                foreach (DataGridViewRow row in dgvDocumentos.Rows)
+                {
+                    if (row == null || row.IsNewRow) continue;
+
+                    // IMPORTANTE: Asegúrate de que el índice [0] o el nombre de la columna 
+                    // corresponde a tu columna de tipo CheckBox. 
+                    // Si tiene nombre, puedes usar: row.Cells["NombreDeTuColumnaCheckBox"]
+                    var cellCheckBox = row.Cells[0] as DataGridViewCheckBoxCell;
+
+                    if (cellCheckBox != null)
+                    {
+                        // Obtenemos el valor del checkbox de forma segura (manejando posibles nulos)
+                        bool isChecked = Convert.ToBoolean(cellCheckBox.Value ?? false);
+
+                        if (isChecked)
+                        {
+                            filasSeleccionadas.Add(row);
+                        }
+                    }
+                }
+
+                if (filasSeleccionadas.Count == 0)
+                {
+                    logger.Warn("No hay filas con el checkbox marcado en la grilla.");
+                    MessageBox.Show("Por favor, seleccione al menos un documento marcando su casilla.", "Información", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                var sb = new StringBuilder();
+                sb.AppendLine("Listado de documentos seleccionados:");
+                sb.AppendLine("--------------------------------------------------");
+
+                foreach (var row in filasSeleccionadas)
+                {
+                    var id = row.Cells["Id"]?.Value?.ToString() ?? string.Empty;
+                    var nombreDoc = row.Cells["colName"]?.Value?.ToString() ?? string.Empty;
+                    var archivo = row.Cells["ColFileName"]?.Value?.ToString() ?? string.Empty;
+                    var fullPath = row.Cells["colFullPath"]?.Value?.ToString() ?? string.Empty;
+                    var signedFullPath = row.Cells["colSignedFullPath"]?.Value?.ToString() ?? string.Empty;
+
+                    FirmaContrasenia(fullPath, signedFullPath);
+                }
+
+                logger.Info($"Se procesaron {filasSeleccionadas.Count} filas seleccionadas mediante el CheckBox.");
+                //MessageBox.Show(sb.ToString(), "Documentos Seleccionados", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                MessageBox.Show($"Se procesaron {filasSeleccionadas.Count} filas seleccionadas mediante el CheckBox.", "Documentos Seleccionados", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "Ocurrió una excepción en MostrarFilasSeleccionadas.");
+                MessageBox.Show($"Ocurrió un error al procesar las filas seleccionadas: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
     }
 }
