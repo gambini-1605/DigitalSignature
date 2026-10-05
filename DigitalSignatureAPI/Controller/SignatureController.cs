@@ -70,7 +70,7 @@ namespace DigitalSignatureAPI.Controller
             }
 
             // Actualizar únicamente los campos requeridos
-            document.SignedFileName = dto.SignedFileName;
+            //document.SignedFileName = dto.SignedFileName;
             document.SignedFullPath = dto.SignedFullPath;
             document.Status = dto.Status;
             document.ErrorCode = dto.ErrorCode;
