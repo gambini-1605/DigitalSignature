@@ -16,14 +16,14 @@ namespace DigitalSignature
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            //Guid requestId = Guid.Empty;
-            //List<int> documentIds = new List<int>();
-
-            Guid requestId = Guid.Parse("7F3C2A91-8B54-4D21-A6E7-91C84F52B103");
+            Guid requestId = Guid.Empty;
             List<int> documentIds = new List<int>();
-            documentIds.Add(100);
-            documentIds.Add(200);
-            documentIds.Add(201);
+
+            //Guid requestId = Guid.Parse(",");
+            //List<int> documentIds = new List<int>();
+            //documentIds.Add(100);
+            //documentIds.Add(200);
+            //documentIds.Add(201);
 
             // Validar que se recibieron los argumentos desde el proceso externo
             if (args != null && args.Length >= 2)
