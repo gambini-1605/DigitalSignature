@@ -38,6 +38,19 @@ namespace DigitalSignature
             Timeout = TimeSpan.FromSeconds(30)
         };
         #endregion
+
+        #region Constructores y carga
+        public FrmDigitalSignature() : this(Guid.Empty, new List<int>()) { }
+
+        public FrmDigitalSignature(Guid requestId, List<int> documentIds)
+        {
+            InitializeComponent();
+            ConfigurarLogger();
+
+            _requestId = requestId;
+            _documentIds = documentIds;
+        }
+
         private void FrmDigitalSignature_Load(object sender, EventArgs e)
         {
             CargarGrilla();
@@ -56,20 +69,8 @@ namespace DigitalSignature
             }
         }
 
-        public FrmDigitalSignature() : this(Guid.Empty, new List<int>()) { }
-
-        public FrmDigitalSignature(Guid requestId, List<int> documentIds)
-        {
-            InitializeComponent();
-            ConfigurarLogger();
-
-            _requestId = requestId;
-            _documentIds = documentIds;
-        }
-
         private async void LoadForm(Guid requestId, List<int> documentIds)
         {
-
             try
             {
                 logger.Info("Iniciando consulta de firma a la API.");
@@ -87,7 +88,7 @@ namespace DigitalSignature
                 logger.Info($"Enviando RequestId: {requestData.RequestId} con {requestData.DocumentIds.Count} documentos.");
                 logger.Info($"ApiUrl: {ApiUrl}");
 
-                // 2. Llamar a la API 
+                // 2. Llamar a la API
                 HttpResponseMessage response = await client.PostAsync(ApiUrl, content);
 
                 if (response.IsSuccessStatusCode)
@@ -95,12 +96,12 @@ namespace DigitalSignature
                     string jsonResponse = await response.Content.ReadAsStringAsync();
                     var apiResponse = JsonConvert.DeserializeObject<SignatureApiResponse>(jsonResponse);
 
-                    // 4. Llenar los controles de texto (Cabecera)
+                    // 3. Llenar los controles de texto (Cabecera)
                     txtRequestId.Text = apiResponse.RequestId.ToString();
                     txtEstadoSolicitud.Text = apiResponse.Status;
                     txtFechaCreacion.Text = apiResponse.DateCreated.ToString("dd/MM/yyyy HH:mm");
 
-                    // 5. Llenar la grilla
+                    // 4. Llenar la grilla
                     dgvDocumentos.DataSource = apiResponse.Documents;
                     dgvDocumentos.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
                     logger.Info($"Consulta exitosa. Estado: {apiResponse.Status}, Documentos recibidos: {apiResponse.Documents?.Count}");
@@ -118,7 +119,6 @@ namespace DigitalSignature
             }
             finally
             {
-                //btnConsultar.Enabled = true;
                 logger.Info("Finalizó el proceso del botón consultar.");
             }
         }
@@ -138,15 +138,16 @@ namespace DigitalSignature
             config.AddRule(LogLevel.Info, LogLevel.Fatal, logfile);
             LogManager.Configuration = config;
         }
+        #endregion
 
         #region ClickEvent
         private async void btnIniciarFirma_Click(object sender, EventArgs e)
         {
-
             logger.Info("btnIniciarFirma_Click - Inicio.");
+
             try
             {
-                if (HayFilasSeleccionadas() == false)
+                if (!HayFilasSeleccionadas())
                 {
                     MessageBox.Show("No hay filas seleccionadas.", "Advertencia", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
@@ -154,16 +155,14 @@ namespace DigitalSignature
 
                 if (rbTokenUSB.Checked)
                 {
-                    var flowControl = await ProcesarTokenUSB();
-                    if (!flowControl)
-                    {
+                    bool procesado = await ProcesarTokenUSB();
+                    if (!procesado)
                         return;
-                    }
                 }
 
                 if (rbArchivoPfx.Checked)
                 {
-                    logger.Info("btnIniciarFirma_Click:", rbArchivoPfx.Checked);
+                    logger.Info("btnIniciarFirma_Click - Modo archivo PFX.");
 
                     using (var frmUploadFiles = new FrmUploadFiles())
                     {
@@ -174,7 +173,7 @@ namespace DigitalSignature
                             var certificado = frmUploadFiles.Certificado;
                             var password = frmUploadFiles.Password;
 
-                            ProcesarArchivoPFXConContrasenia(certificado, password);
+                            await ProcesarArchivoPFXConContrasenia(certificado, password);
                         }
                         else
                         {
@@ -199,149 +198,100 @@ namespace DigitalSignature
         #region ProcesarTokenUSB
         private async Task<bool> ProcesarTokenUSB()
         {
-            try
+            var filas = ObtenerFilasSeleccionadas();
+
+            if (filas.Count == 0)
             {
-                var filasSeleccionadas = new List<DataGridViewRow>();
-
-                foreach (DataGridViewRow row in dgvDocumentos.Rows)
-                {
-                    if (row == null || row.IsNewRow) continue;
-
-                    var cellCheckBox = row.Cells[0] as DataGridViewCheckBoxCell;
-
-                    if (cellCheckBox != null)
-                    {
-                        bool isChecked = Convert.ToBoolean(cellCheckBox.Value ?? false);
-
-                        if (isChecked)
-                        {
-                            filasSeleccionadas.Add(row);
-                        }
-                    }
-                }
-
-                if (filasSeleccionadas.Count == 0)
-                {
-                    logger.Warn("No hay filas con el checkbox marcado en la grilla.");
-                    MessageBox.Show("Por favor, seleccione al menos un documento marcando su casilla.", "Información", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return false;
-                }
-
-                foreach (var row in filasSeleccionadas)
-                {
-
-                    var tocId = row.Cells["id"]?.Value?.ToString() ?? string.Empty;
-                    var fullPath = row.Cells["colFullPath"]?.Value?.ToString() ?? string.Empty;
-                    var signedFullPath = row.Cells["colSignedFullPath"]?.Value?.ToString() ?? string.Empty;
-                    var signedFileName = row.Cells["colSignedFullPath"]?.Value?.ToString() ?? string.Empty;//ColFileName
-
-                    var signatureResult = FirmaTokenUSB(fullPath, signedFullPath, tocId);
-
-                    var updateSignatureDocumentRequest = new UpdateSignatureDocumentRequest
-                    {
-                        SignedFullPath = signedFullPath,
-                        Status = "SIGNED",
-                        SignatureResult = signatureResult
-                    };
-
-
-                    var updateSignatureDocumentDto = new UpdateSignatureDocumentDto
-                    {
-                        SignedFullPath = updateSignatureDocumentRequest.SignedFullPath,
-                        Status = updateSignatureDocumentRequest.Status,
-                        SignatureResult = updateSignatureDocumentRequest.SignatureResult
-                    };
-
-                    var response = await ActualizarDocumentoFirmadoAsync(Convert.ToInt32(tocId), updateSignatureDocumentDto);
-
-                    CargarGrilla();
-                }
-            }
-            catch (Exception)
-            {
-
-                throw;
+                logger.Warn("No hay filas con el checkbox marcado en la grilla.");
+                MessageBox.Show("Por favor, seleccione al menos un documento marcando su casilla.",
+                    "Información", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return false;
             }
 
-            return false;
+            // El certificado se elige una sola vez para todo el lote
+            X509Certificate2 cert = SeleccionarCertificadoToken();
+            if (cert == null)
+                return false; // sin certificado o el usuario canceló
+
+            int firmados = 0;
+
+            foreach (var row in filas)
+            {
+                string tocId = row.Cells["id"]?.Value?.ToString() ?? string.Empty;
+                string fullPath = row.Cells["colFullPath"]?.Value?.ToString() ?? string.Empty;
+                string signedFullPath = row.Cells["colSignedFullPath"]?.Value?.ToString() ?? string.Empty;
+
+                string resultado = null;
+                string error = null;
+
+                try
+                {
+                    resultado = FirmaTokenUSB(fullPath, signedFullPath, cert);
+                    firmados++;
+                }
+                catch (Exception ex)
+                {
+                    logger.Error(ex, $"Error al firmar el documento {tocId} con token.");
+                    error = ex.Message;
+                }
+
+                await RegistrarResultadoAsync(tocId, signedFullPath, resultado, error);
+            }
+
+            CargarGrilla(); // una sola vez, al terminar
+
+            MessageBox.Show($"Documentos firmados: {firmados} de {filas.Count}.",
+                "Resultado", MessageBoxButtons.OK,
+                firmados == filas.Count ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+
+            return true;
         }
 
-        private string FirmaTokenUSB(string rutaOrigen, string rutaDestino, string tocId)
+        /// <summary>
+        /// Muestra solo los certificados disponibles para firma y valida el acceso
+        /// a la clave privada (aquí el driver puede pedir el PIN).
+        /// Devuelve null si no hay certificados o el usuario cancela.
+        /// </summary>
+        private X509Certificate2 SeleccionarCertificadoToken()
         {
-            try
+            using (X509Store store = new X509Store(StoreName.My, StoreLocation.CurrentUser))
             {
-                // ==========================================
-                // 1. OBTENER CERTIFICADO (SOLO LOS DISPONIBLES PARA FIRMA)
-                // ==========================================
-                X509Certificate2 cert = null;
+                store.Open(OpenFlags.ReadOnly);
 
-                using (X509Store store = new X509Store(StoreName.My, StoreLocation.CurrentUser))
+                var disponibles = new X509Certificate2Collection();
+
+                foreach (X509Certificate2 c in store.Certificates)
                 {
-                    store.Open(OpenFlags.ReadOnly);
+                    if (EsCertificadoDisponibleParaFirma(c))
+                        disponibles.Add(c);
+                }
 
-                    var disponibles = new X509Certificate2Collection();
+                if (disponibles.Count == 0)
+                {
+                    MessageBox.Show(
+                        "No hay certificados disponibles para firma.\n\n" +
+                        "Verifique que el token esté conectado, que el certificado\n" +
+                        "no esté vencido y que tenga clave privada.");
+                    return null;
+                }
 
-                    foreach (X509Certificate2 c in store.Certificates)
-                    {
-                        if (EsCertificadoDisponibleParaFirma(c))
-                            disponibles.Add(c);
-                    }
+                X509Certificate2 cert;
 
-                    if (disponibles.Count == 0)
-                    {
-                        MessageBox.Show(
-                            "No hay certificados disponibles para firma.\n\n" +
-                            "Verifique que el token esté conectado, que el certificado\n" +
-                            "no esté vencido y que tenga clave privada.");
-                        return null;
-                    }
+                if (disponibles.Count == 1)
+                {
+                    cert = disponibles[0];
+                }
+                else
+                {
+                    var col = X509Certificate2UI.SelectFromCollection(
+                        disponibles, "Certificados", "Seleccione el certificado",
+                        X509SelectionFlag.SingleSelection);
 
-                    if (disponibles.Count == 1)
-                    {
-                        cert = disponibles[0];
-                    }
-                    else
-                    {
-                        var col = X509Certificate2UI.SelectFromCollection(
-                            disponibles, "Certificados", "Seleccione el certificado",
-                            X509SelectionFlag.SingleSelection);
-
-                        cert = col.Count > 0 ? col[0] : null;
-                    }
+                    cert = col.Count > 0 ? col[0] : null;
                 }
 
                 if (cert == null)
                     return null;
-
-                // ==========================================
-                // 2. OBTENER RUTAS DEL PDF
-                // ==========================================
-
-                string pdfEntrada = rutaOrigen;
-                string pdfDestino = rutaDestino;
-
-                if (string.IsNullOrWhiteSpace(pdfEntrada))
-                {
-                    MessageBox.Show("Ingrese la ruta del PDF de entrada.");
-                    return null;
-                }
-
-                if (string.IsNullOrWhiteSpace(pdfDestino))
-                {
-                    MessageBox.Show("Ingrese la ruta del PDF destino.");
-                    return null;
-                }
-
-                if (!System.IO.File.Exists(pdfEntrada))
-                {
-                    MessageBox.Show("El PDF de entrada no existe:\n\n" + pdfEntrada);
-                    return null;
-                }
-
-                // ==========================================
-                // 3. ACCESO A LA CLAVE PRIVADA
-                // ==========================================
-                // Aquí CryptoID / Windows puede mostrar la ventana del PIN.
 
                 using (RSA rsa = cert.GetRSAPrivateKey())
                 {
@@ -352,143 +302,44 @@ namespace DigitalSignature
                     }
                 }
 
-                // ==========================================
-                // 4. CREAR DIRECTORIO DESTINO SI NO EXISTE
-                // ==========================================
-
-                string directorioDestino = Path.GetDirectoryName(pdfDestino);
-
-                if (!string.IsNullOrWhiteSpace(directorioDestino) &&
-                    !Directory.Exists(directorioDestino))
-                {
-                    Directory.CreateDirectory(directorioDestino);
-                }
-
-                // ==========================================
-                // 5. FIRMAR PDF
-                // ==========================================
-
-                Firma.SignHashed(
-                    pdfEntrada,
-                    pdfDestino,
-                    cert,
-                    "Valor Legal",
-                    "DigitalSoft",
-                    false,
-                    false,
-                    "");
-
-                // ==========================================
-                // 6. VALIDAR RESULTADO
-                // ==========================================
-
-                if (System.IO.File.Exists(pdfDestino))
-                {
-                    FileInfo info = new FileInfo(pdfDestino);
-
-                    var asuntoCertificado = cert.Subject;
-                    var serial = cert.SerialNumber;
-                    var pdfEntradaOut = pdfEntrada;
-                    var nombreFedatario_ = ExtractCN2(cert.Subject.ToString(), "CN");
-                    var inicioValidez = string.Empty;
-                    var finValidez = string.Empty;
-
-                    string detalleVigenciaFirmas = string.Empty;
-
-                    // Lectura del PDF firmado usando iText7 para extraer la vigencia de las firmas
-                    // Si usas iTextSharp (v5.5.x) en lugar de iText 7:
-                    using (PdfReader pdfReader = new PdfReader(pdfDestino))
-                    {
-                        AcroFields fields = pdfReader.AcroFields;
-                        var signatureNames = fields.GetSignatureNames();
-
-                        foreach (string name in signatureNames)
-                        {
-                            iTextSharp.text.pdf.security.PdfPKCS7 pkcs7 = fields.VerifySignature(name);
-                            var signingCert = pkcs7.SigningCertificate;
-
-                            inicioValidez = signingCert.NotBefore.ToString();
-                            finValidez = signingCert.NotAfter.ToString();
-
-                            detalleVigenciaFirmas += $"\n- Campo '{name}':\n  * Desde: {inicioValidez}\n  * Hasta: {finValidez}";
-                        }
-                    }
-                    var versionCertificado = cert.Version;
-                    var algoritmoFirma = cert.SignatureAlgorithm.FriendlyName;
-                    var emitidoPor_ = ExtractCN2(cert.Issuer, "CN");
-
-                    //MessageBox.Show(
-                    //"FIRMA PDF OK\n\n" +
-
-                    //"Asunto Certificado:\n" +
-                    //asuntoCertificado +
-
-                    //"\n\nSerial:\n" +
-                    // serial +
-
-                    //"\n\nPDF entrada:\n" +
-                    //pdfEntradaOut +
-
-                    //"\n\nPDF firmado:\n" +
-                    //pdfDestino +
-
-                    //"\n\nTamaño:\n" +
-                    //info.Length +
-                    //" bytes" +
-
-                    //"\n\nNombre Fedatario:\n" +
-                    //nombreFedatario_ +
-
-                    //"\n\ndetalleVigenciaFirmas:\n" +
-                    //detalleVigenciaFirmas +
-
-                    //"\n\nVersion Certificado:\n" +
-                    //versionCertificado +
-
-                    //"\n\nAlgoritmo Firma:\n" +
-                    //algoritmoFirma+
-
-                    //"\n\nEmitido Por:\n" +
-                    //emitidoPor_,
-
-                    //"Firma correcta",
-                    //MessageBoxButtons.OK,
-                    //MessageBoxIcon.Information);
-
-
-                    var resultado = new
-                    {
-                        nombreFedatario = nombreFedatario_,
-                        fechaDesde = inicioValidez,
-                        fechaHasta = finValidez,
-                        emitidoPor = emitidoPor_,
-                        versionDigitalSignature = versionCertificado,
-                        algoritmo = algoritmoFirma,
-                        asunto = asuntoCertificado,
-
-                        //signatureAlgorithm = cert.SignatureAlgorithm.FriendlyName,
-                        //signatureAlgorithmOid = cert.SignatureAlgorithm.Value,
-                        //subject = cert.Subject,
-                        //issuer = cert.Issuer
-                    };
-
-                    return JsonConvert.SerializeObject(resultado);
-                }
-                else
-                {
-                    MessageBox.Show(
-                        "La operación terminó, pero no se encontró el PDF destino.",
-                        "Advertencia",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Warning);
-
-                    return null;
-                }
+                return cert;
             }
-            catch (Exception)
-            {
-                throw;
-            }
+        }
+
+        /// <summary>
+        /// Firma un PDF con el certificado indicado. Devuelve el JSON con los datos
+        /// del certificado, o lanza una excepción si algo falla.
+        /// </summary>
+        private string FirmaTokenUSB(string rutaOrigen, string rutaDestino, X509Certificate2 cert)
+        {
+            if (string.IsNullOrWhiteSpace(rutaOrigen))
+                throw new ArgumentException("La ruta del PDF de entrada está vacía.");
+
+            if (string.IsNullOrWhiteSpace(rutaDestino))
+                throw new ArgumentException("La ruta del PDF destino está vacía.");
+
+            if (!System.IO.File.Exists(rutaOrigen))
+                throw new FileNotFoundException("El PDF de entrada no existe.", rutaOrigen);
+
+            string directorioDestino = Path.GetDirectoryName(rutaDestino);
+
+            if (!string.IsNullOrWhiteSpace(directorioDestino) && !Directory.Exists(directorioDestino))
+                Directory.CreateDirectory(directorioDestino);
+
+            Firma.SignHashed(
+                rutaOrigen,
+                rutaDestino,
+                cert,
+                "Valor Legal",
+                "DigitalSoft",
+                false,
+                false,
+                "");
+
+            if (!System.IO.File.Exists(rutaDestino))
+                throw new FileNotFoundException("La operación terminó, pero no se encontró el PDF destino.", rutaDestino);
+
+            return ConstruirResultadoFirma(cert);
         }
 
         private static bool EsCertificadoDisponibleParaFirma(X509Certificate2 c)
@@ -526,191 +377,176 @@ namespace DigitalSignature
                 return false;
             }
         }
-
         #endregion
 
         #region ProcesarArchivoPFXConContrasenia
-        private async void ProcesarArchivoPFXConContrasenia(string certificado, string password)
+        private async Task ProcesarArchivoPFXConContrasenia(string certificado, string password)
         {
-            try
+            logger.Info("ProcesarArchivoPFXConContrasenia inicio.");
+
+            var filas = ObtenerFilasSeleccionadas();
+
+            if (filas.Count == 0)
             {
-
-                logger.Info("ProcesarArchivoPFXConContrasenia inicio:");
-
-                var filasSeleccionadas = new List<DataGridViewRow>();
-
-                foreach (DataGridViewRow row in dgvDocumentos.Rows)
-                {
-                    if (row == null || row.IsNewRow) continue;
-
-                    var cellCheckBox = row.Cells[0] as DataGridViewCheckBoxCell;
-
-                    if (cellCheckBox != null)
-                    {
-                        bool isChecked = Convert.ToBoolean(cellCheckBox.Value ?? false);
-
-                        if (isChecked)
-                        {
-                            filasSeleccionadas.Add(row);
-                        }
-                    }
-                }
-
-                if (filasSeleccionadas.Count == 0)
-                {
-                    logger.Warn("No hay filas con el checkbox marcado en la grilla.");
-                    MessageBox.Show("Por favor, seleccione al menos un documento marcando su casilla.", "Información", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
-                }
-
-                foreach (var row in filasSeleccionadas)
-                {
-                    var tocId = row.Cells["Id"]?.Value?.ToString() ?? string.Empty;
-                    var nombreDoc = row.Cells["colName"]?.Value?.ToString() ?? string.Empty;
-                    var archivo = row.Cells["ColFileName"]?.Value?.ToString() ?? string.Empty;
-                    var fullPath = row.Cells["colFullPath"]?.Value?.ToString() ?? string.Empty;
-                    var signedFullPath = row.Cells["colSignedFullPath"]?.Value?.ToString() ?? string.Empty;
-
-                    var signatureResult = FirmaCertificadoConContrasenia(fullPath, signedFullPath, certificado, password);
-
-                    var updateSignatureDocumentRequest = new UpdateSignatureDocumentRequest
-                    {
-                        SignedFullPath = signedFullPath,
-                        Status = "SIGNED",
-                        SignatureResult = signatureResult
-                    };
-
-
-                    var updateSignatureDocumentDto = new UpdateSignatureDocumentDto
-                    {
-                        SignedFullPath = updateSignatureDocumentRequest.SignedFullPath,
-                        Status = updateSignatureDocumentRequest.Status,
-                        SignatureResult = updateSignatureDocumentRequest.SignatureResult
-                    };
-
-                    var response = await ActualizarDocumentoFirmadoAsync(Convert.ToInt32(tocId), updateSignatureDocumentDto);
-
-                    CargarGrilla();
-                }
-
-                logger.Info($"Se procesaron {filasSeleccionadas.Count} filas seleccionadas mediante el CheckBox.");
-                MessageBox.Show($"Se procesaron {filasSeleccionadas.Count} filas seleccionadas mediante el CheckBox.", "Documentos Seleccionados", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                logger.Warn("No hay filas con el checkbox marcado en la grilla.");
+                MessageBox.Show("Por favor, seleccione al menos un documento marcando su casilla.",
+                    "Información", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
             }
-            catch (Exception ex)
+
+            int firmados = 0;
+
+            foreach (var row in filas)
             {
-                logger.Error(ex, "Ocurrió una excepción en MostrarFilasSeleccionadas.");
-                MessageBox.Show($"Ocurrió un error al procesar las filas seleccionadas: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                string tocId = row.Cells["Id"]?.Value?.ToString() ?? string.Empty;
+                string fullPath = row.Cells["colFullPath"]?.Value?.ToString() ?? string.Empty;
+                string signedFullPath = row.Cells["colSignedFullPath"]?.Value?.ToString() ?? string.Empty;
+
+                string resultado = null;
+                string error = null;
+
+                try
+                {
+                    resultado = FirmaCertificadoConContrasenia(fullPath, signedFullPath, certificado, password);
+
+                    if (resultado == null)
+                        error = "No se encontró la clave privada en el certificado.";
+                }
+                catch (Exception ex)
+                {
+                    logger.Error(ex, $"Error al firmar el documento {tocId} con PFX.");
+                    error = ex.Message;
+                }
+
+                if (error == null)
+                    firmados++;
+
+                await RegistrarResultadoAsync(tocId, signedFullPath, resultado, error);
             }
+
+            CargarGrilla(); // una sola vez, al terminar
+
+            logger.Info($"Documentos firmados con PFX: {firmados} de {filas.Count}.");
+
+            MessageBox.Show($"Documentos firmados: {firmados} de {filas.Count}.",
+                "Resultado", MessageBoxButtons.OK,
+                firmados == filas.Count ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
 
+        /// <summary>
+        /// Firma un PDF con un archivo PFX. Devuelve el JSON con los datos del certificado,
+        /// o null si el PFX no contiene clave privada.
+        /// </summary>
         private string FirmaCertificadoConContrasenia(string fullPath, string signedFullPath, string certificado, string password)
         {
             PdfReader pdfReader = null;
+            FileStream salida = null;
 
             try
             {
                 pdfReader = new PdfReader(fullPath);
 
-                string pfxFilePath = certificado;
-                string pfxPassword = password;
-
                 Org.BouncyCastle.Pkcs.Pkcs12Store pfxKeyStore = new Org.BouncyCastle.Pkcs.Pkcs12StoreBuilder().Build();
 
-                string resultadoJson = null;
-
-                using (Stream stream = new FileStream(pfxFilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (Stream stream = new FileStream(certificado, FileMode.Open, FileAccess.Read, FileShare.Read))
                 {
-                    pfxKeyStore.Load(stream, pfxPassword.ToCharArray());
-
-                    string alias = pfxKeyStore.Aliases.Cast<string>()
-                        .FirstOrDefault(entryAlias => pfxKeyStore.IsKeyEntry(entryAlias));
-
-                    // Sin clave privada no se firma: se sale antes de crear el PDF destino
-                    if (alias == null)
-                        return null;
-
-                    Org.BouncyCastle.X509.X509Certificate bcCert = pfxKeyStore.GetCertificate(alias).Certificate;
-
-                    PdfStamper pdfStamper = PdfStamper.CreateSignature(
-                        pdfReader, new FileStream(signedFullPath, FileMode.Create), '\0', null, true);
-
-                    PdfSignatureAppearance signatureAppearance = pdfStamper.SignatureAppearance;
-
-                    float x = 360;
-                    float y = 130;
-                    signatureAppearance.Acro6Layers = false;
-
-                    signatureAppearance.Reason = "Este documento está assignado digitalmente para Estado Peru";
-                    signatureAppearance.Location = "Lima, Peru";
-                    signatureAppearance.SignDate = DateTime.Now;
-
-                    signatureAppearance.Layer4Text = PdfSignatureAppearance.questionMark;
-                    signatureAppearance.SetVisibleSignature(
-                        new iTextSharp.text.Rectangle(x, y, x + 150, y + 50), 1, "signature");
-
-                    ICipherParameters privateKey = pfxKeyStore.GetKey(alias).Key;
-                    IExternalSignature pks = new iTextSharp.text.pdf.security.PrivateKeySignature(privateKey, DigestAlgorithms.SHA256);
-
-                    MakeSignature.SignDetached(
-                        signatureAppearance, pks,
-                        new Org.BouncyCastle.X509.X509Certificate[] { bcCert },
-                        null, null, null, 0, CryptoStandard.CMS);
-
-                    pdfStamper.Close();
-
-                    // Se convierte a X509Certificate2 para que el JSON sea igual al de FirmaToken
-                    X509Certificate2 cert = new X509Certificate2(DotNetUtilities.ToX509Certificate(bcCert));
-
-                    var nombreFedatario_ = ExtractCN2(cert.Subject.ToString(), "CN");
-                    var emitidoPor_ = ExtractCN2(cert.Issuer, "CN");
-                    var algoritmoFirma = cert.SignatureAlgorithm.FriendlyName;
-                    var versionCertificado = cert.Version;
-                    var inicioValidez = string.Empty;
-                    var finValidez = string.Empty;
-                    var asuntoCertificado = cert.Subject;
-
-                    using (PdfReader pdfReader2 = new PdfReader(signedFullPath))
-                    {
-                        AcroFields fields = pdfReader2.AcroFields;
-                        var signatureNames = fields.GetSignatureNames();
-
-                        foreach (string name in signatureNames)
-                        {
-                            iTextSharp.text.pdf.security.PdfPKCS7 pkcs7 = fields.VerifySignature(name);
-                            var signingCert = pkcs7.SigningCertificate;
-
-                            inicioValidez = signingCert.NotBefore.ToString();
-                            finValidez = signingCert.NotAfter.ToString();
-                        }
-                    }
-
-                    var resultado = new
-                    {
-                        nombreFedatario = nombreFedatario_,
-                        fechaDesde = inicioValidez,
-                        fechaHasta = finValidez,
-                        emitidoPor = emitidoPor_,
-                        versionDigitalSignature = versionCertificado,
-                        algoritmo = algoritmoFirma,
-                        asunto = asuntoCertificado
-                    };
-
-                    resultadoJson = JsonConvert.SerializeObject(resultado);
+                    pfxKeyStore.Load(stream, password.ToCharArray());
                 }
 
-                return resultadoJson;
-            }
-            catch (Exception)
-            {
-                throw;
+                string alias = pfxKeyStore.Aliases.Cast<string>()
+                    .FirstOrDefault(entryAlias => pfxKeyStore.IsKeyEntry(entryAlias));
+
+                // Sin clave privada no se firma: se sale antes de crear el PDF destino
+                if (alias == null)
+                    return null;
+
+                Org.BouncyCastle.X509.X509Certificate bcCert = pfxKeyStore.GetCertificate(alias).Certificate;
+
+                string directorioDestino = Path.GetDirectoryName(signedFullPath);
+
+                if (!string.IsNullOrWhiteSpace(directorioDestino) && !Directory.Exists(directorioDestino))
+                    Directory.CreateDirectory(directorioDestino);
+
+                salida = new FileStream(signedFullPath, FileMode.Create);
+
+                PdfStamper pdfStamper = PdfStamper.CreateSignature(pdfReader, salida, '\0', null, true);
+
+                PdfSignatureAppearance signatureAppearance = pdfStamper.SignatureAppearance;
+
+                float x = 360;
+                float y = 130;
+                signatureAppearance.Acro6Layers = false;
+
+                signatureAppearance.Reason = "Este documento está assignado digitalmente para Estado Peru";
+                signatureAppearance.Location = "Lima, Peru";
+                signatureAppearance.SignDate = DateTime.Now;
+
+                signatureAppearance.Layer4Text = PdfSignatureAppearance.questionMark;
+                signatureAppearance.SetVisibleSignature(
+                    new iTextSharp.text.Rectangle(x, y, x + 150, y + 50), 1, "signature");
+
+                ICipherParameters privateKey = pfxKeyStore.GetKey(alias).Key;
+                IExternalSignature pks = new iTextSharp.text.pdf.security.PrivateKeySignature(privateKey, DigestAlgorithms.SHA256);
+
+                MakeSignature.SignDetached(
+                    signatureAppearance, pks,
+                    new Org.BouncyCastle.X509.X509Certificate[] { bcCert },
+                    null, null, null, 0, CryptoStandard.CMS);
+
+                pdfStamper.Close();
+
+                // Se convierte a X509Certificate2 para que el JSON sea igual al del token
+                X509Certificate2 cert = new X509Certificate2(DotNetUtilities.ToX509Certificate(bcCert));
+
+                return ConstruirResultadoFirma(cert);
             }
             finally
             {
+                if (salida != null)
+                    salida.Dispose();
+
                 if (pdfReader != null)
                     pdfReader.Close();
             }
         }
         #endregion
+
+        #region Utilidades compartidas
+        /// <summary>
+        /// Arma el JSON con los datos del certificado usado para firmar.
+        /// Se usa tanto para el token USB como para el archivo PFX.
+        /// </summary>
+        private static string ConstruirResultadoFirma(X509Certificate2 cert)
+        {
+            var resultado = new
+            {
+                nombreFedatario = cert.GetNameInfo(X509NameType.SimpleName, false), // CN del titular
+                fechaDesde = cert.NotBefore.ToString(),
+                fechaHasta = cert.NotAfter.ToString(),
+                emitidoPor = cert.GetNameInfo(X509NameType.SimpleName, true),       // CN del emisor
+                versionDigitalSignature = cert.Version,
+                algoritmo = cert.SignatureAlgorithm.FriendlyName,
+                asunto = cert.Subject
+            };
+
+            return JsonConvert.SerializeObject(resultado);
+        }
+
+        private List<DataGridViewRow> ObtenerFilasSeleccionadas()
+        {
+            var filas = new List<DataGridViewRow>();
+
+            foreach (DataGridViewRow row in dgvDocumentos.Rows)
+            {
+                if (row == null || row.IsNewRow) continue;
+
+                var chk = row.Cells[0] as DataGridViewCheckBoxCell;
+                if (chk != null && Convert.ToBoolean(chk.Value ?? false))
+                    filas.Add(row);
+            }
+
+            return filas;
+        }
 
         private bool HayFilasSeleccionadas()
         {
@@ -725,33 +561,25 @@ namespace DigitalSignature
                 foreach (DataGridViewRow row in dgvDocumentos.Rows)
                 {
                     if (row == null || row.IsNewRow)
-                    {
                         continue;
-                    }
 
-                    // Intentar por la celda esperada en la columna 0 (estilo existente en el formulario)
+                    // Intentar por la celda esperada en la columna 0
                     var cellCheckBox = row.Cells.Count > 0 ? row.Cells[0] as DataGridViewCheckBoxCell : null;
 
                     if (cellCheckBox != null)
                     {
-                        bool isChecked = Convert.ToBoolean(cellCheckBox.Value ?? false);
-                        if (isChecked)
-                        {
+                        if (Convert.ToBoolean(cellCheckBox.Value ?? false))
                             return true;
-                        }
                     }
                     else
                     {
-                        // Si no hay checkbox en la posición 0, buscar cualquier celda tipo checkbox en la fila
+                        // Si no hay checkbox en la posición 0, buscar cualquier celda tipo checkbox
                         foreach (DataGridViewCell cell in row.Cells)
                         {
-                            if (cell is DataGridViewCheckBoxCell)
+                            if (cell is DataGridViewCheckBoxCell &&
+                                Convert.ToBoolean(cell.Value ?? false))
                             {
-                                bool isChecked = Convert.ToBoolean(cell.Value ?? false);
-                                if (isChecked)
-                                {
-                                    return true;
-                                }
+                                return true;
                             }
                         }
                     }
@@ -765,6 +593,32 @@ namespace DigitalSignature
                 return false;
             }
         }
+        #endregion
+
+        #region API
+        /// <summary>
+        /// Informa a la API el resultado de la firma de un documento (SIGNED o ERROR).
+        /// </summary>
+        private async Task RegistrarResultadoAsync(
+            string tocId, string signedFullPath, string signatureResult, string errorMessage)
+        {
+            bool ok = signatureResult != null && errorMessage == null;
+
+            var dto = new UpdateSignatureDocumentDto
+            {
+                SignedFileName = Path.GetFileName(signedFullPath),
+                SignedFullPath = signedFullPath,
+                Status = ok ? "SIGNED" : "ERROR",
+                ErrorCode = ok ? null : "SIGN_FAILED",
+                ErrorMessage = ok ? null : errorMessage,
+                SignatureResult = ok ? signatureResult : null
+            };
+
+            var response = await ActualizarDocumentoFirmadoAsync(Convert.ToInt32(tocId), dto);
+
+            if (!response.Success)
+                logger.Warn($"La API rechazó la actualización del doc {tocId}: {response.StatusCode} - {response.Message}");
+        }
 
         private async Task<UpdateSignatureDocumentResponse> ActualizarDocumentoFirmadoAsync(int tocId, UpdateSignatureDocumentDto request)
         {
@@ -775,7 +629,6 @@ namespace DigitalSignature
                 string json = JsonConvert.SerializeObject(request);
 
                 using (var content = new StringContent(json, Encoding.UTF8, "application/json"))
-                //using (HttpResponseMessage resp = await _http.PutAsync("api/Signature/document/" + tocId, content))
                 using (HttpResponseMessage resp = await _http.PutAsync("document/" + tocId.ToString(), content))
                 {
                     string body = await resp.Content.ReadAsStringAsync();
@@ -820,23 +673,6 @@ namespace DigitalSignature
             public string ErrorMessage { get; set; }
             public string SignatureResult { get; set; }
         }
-
-        private string ExtractCN2(string dn, string strValue)
-        {
-            string[] parts = dn.Split(new char[] { ',' });
-
-            for (int i = 0; i < parts.Length; i++)
-            {
-                var p = parts[i];
-                var elems = p.Split(new char[] { '=' });
-                var t = elems[0].Trim().ToUpper();
-                var v = elems[1].Trim();
-                if (t == strValue)
-                {
-                    return v;
-                }
-            }
-            return null;
-        }
+        #endregion
     }
 }
