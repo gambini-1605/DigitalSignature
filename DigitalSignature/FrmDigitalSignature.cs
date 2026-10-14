@@ -401,6 +401,7 @@ namespace DigitalSignature
                                 {
                                     error = "No se encontró la clave privada en el certificado.";
                                     MessageBox.Show($"Error: {error}", "Resultado", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                                    await RegistrarResultadoAsync(tocId, signedFullPath, resultadoFirmaDigital, error);
                                     return;
                                 }
                             }
@@ -541,6 +542,8 @@ namespace DigitalSignature
                 {
                     logger.Error(ex, $"Error al firmar el documento {tocId} con token.");
                     error = ex.Message;
+                    await RegistrarResultadoAsync(tocId, signedFullPath, resultado, error);
+                    return false;
                 }
 
                 await RegistrarResultadoAsync(tocId, signedFullPath, resultado, error);
