@@ -101,6 +101,7 @@
             this.Controls.Add(this.txtCertificado);
             this.Margin = new System.Windows.Forms.Padding(4);
             this.Name = "FrmUploadFiles";
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Subir Archivos para Firma Digital";
             this.Load += new System.EventHandler(this.FrmUploadFiles_Load);
             this.ResumeLayout(false);

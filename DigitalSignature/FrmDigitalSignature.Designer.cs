@@ -44,11 +44,6 @@
             this.rbTokenUSB = new System.Windows.Forms.RadioButton();
             this.groupDocumentos = new System.Windows.Forms.GroupBox();
             this.dgvDocumentos = new System.Windows.Forms.DataGridView();
-            this.btnOpcionesExtra = new System.Windows.Forms.Button();
-            this.btnActualizar = new System.Windows.Forms.Button();
-            this.btnIniciarFirma = new System.Windows.Forms.Button();
-            this.groupLog = new System.Windows.Forms.GroupBox();
-            this.txtLogProceso = new System.Windows.Forms.TextBox();
             this.colSeleccion = new System.Windows.Forms.DataGridViewCheckBoxColumn();
             this.Id = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colName = new System.Windows.Forms.DataGridViewTextBoxColumn();
@@ -56,6 +51,11 @@
             this.colStatus = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colFullPath = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colSignedFullPath = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.btnOpcionesExtra = new System.Windows.Forms.Button();
+            this.btnActualizar = new System.Windows.Forms.Button();
+            this.btnIniciarFirma = new System.Windows.Forms.Button();
+            this.groupLog = new System.Windows.Forms.GroupBox();
+            this.txtLogProceso = new System.Windows.Forms.TextBox();
             this.groupSolicitud.SuspendLayout();
             this.groupMecanismo.SuspendLayout();
             this.groupDocumentos.SuspendLayout();
@@ -262,6 +262,61 @@
             this.dgvDocumentos.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
             this.dgvDocumentos.Size = new System.Drawing.Size(1172, 197);
             this.dgvDocumentos.TabIndex = 3;
+            this.dgvDocumentos.ColumnHeaderMouseClick += new System.Windows.Forms.DataGridViewCellMouseEventHandler(this.dgvDocumentos_ColumnHeaderMouseClick);
+            // 
+            // colSeleccion
+            // 
+            this.colSeleccion.FillWeight = 30F;
+            this.colSeleccion.HeaderText = "";
+            this.colSeleccion.MinimumWidth = 6;
+            this.colSeleccion.Name = "colSeleccion";
+            // 
+            // Id
+            // 
+            this.Id.DataPropertyName = "tocId";
+            this.Id.FillWeight = 60F;
+            this.Id.HeaderText = "Id";
+            this.Id.MinimumWidth = 6;
+            this.Id.Name = "Id";
+            // 
+            // colName
+            // 
+            this.colName.DataPropertyName = "name";
+            this.colName.FillWeight = 150F;
+            this.colName.HeaderText = "Nombre del documento";
+            this.colName.MinimumWidth = 6;
+            this.colName.Name = "colName";
+            // 
+            // ColFileName
+            // 
+            this.ColFileName.DataPropertyName = "fileName";
+            this.ColFileName.HeaderText = "Archivo";
+            this.ColFileName.MinimumWidth = 6;
+            this.ColFileName.Name = "ColFileName";
+            // 
+            // colStatus
+            // 
+            this.colStatus.DataPropertyName = "status";
+            this.colStatus.FillWeight = 70F;
+            this.colStatus.HeaderText = "Estado";
+            this.colStatus.MinimumWidth = 6;
+            this.colStatus.Name = "colStatus";
+            // 
+            // colFullPath
+            // 
+            this.colFullPath.DataPropertyName = "fullPath";
+            this.colFullPath.HeaderText = "FullPath";
+            this.colFullPath.MinimumWidth = 6;
+            this.colFullPath.Name = "colFullPath";
+            this.colFullPath.Visible = false;
+            // 
+            // colSignedFullPath
+            // 
+            this.colSignedFullPath.DataPropertyName = "signedFullPath";
+            this.colSignedFullPath.HeaderText = "SignedFullPath";
+            this.colSignedFullPath.MinimumWidth = 6;
+            this.colSignedFullPath.Name = "colSignedFullPath";
+            this.colSignedFullPath.Visible = false;
             // 
             // btnOpcionesExtra
             // 
@@ -321,60 +376,6 @@
             this.txtLogProceso.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
             this.txtLogProceso.Size = new System.Drawing.Size(1171, 128);
             this.txtLogProceso.TabIndex = 0;
-            // 
-            // colSeleccion
-            // 
-            this.colSeleccion.FillWeight = 30F;
-            this.colSeleccion.HeaderText = "";
-            this.colSeleccion.MinimumWidth = 6;
-            this.colSeleccion.Name = "colSeleccion";
-            // 
-            // Id
-            // 
-            this.Id.DataPropertyName = "tocId";
-            this.Id.FillWeight = 60F;
-            this.Id.HeaderText = "Id";
-            this.Id.MinimumWidth = 6;
-            this.Id.Name = "Id";
-            // 
-            // colName
-            // 
-            this.colName.DataPropertyName = "name";
-            this.colName.FillWeight = 150F;
-            this.colName.HeaderText = "Nombre del documento";
-            this.colName.MinimumWidth = 6;
-            this.colName.Name = "colName";
-            // 
-            // ColFileName
-            // 
-            this.ColFileName.DataPropertyName = "fileName";
-            this.ColFileName.HeaderText = "Archivo";
-            this.ColFileName.MinimumWidth = 6;
-            this.ColFileName.Name = "ColFileName";
-            // 
-            // colStatus
-            // 
-            this.colStatus.DataPropertyName = "status";
-            this.colStatus.FillWeight = 70F;
-            this.colStatus.HeaderText = "Estado";
-            this.colStatus.MinimumWidth = 6;
-            this.colStatus.Name = "colStatus";
-            // 
-            // colFullPath
-            // 
-            this.colFullPath.DataPropertyName = "fullPath";
-            this.colFullPath.HeaderText = "FullPath";
-            this.colFullPath.MinimumWidth = 6;
-            this.colFullPath.Name = "colFullPath";
-            this.colFullPath.Visible = false;
-            // 
-            // colSignedFullPath
-            // 
-            this.colSignedFullPath.DataPropertyName = "signedFullPath";
-            this.colSignedFullPath.HeaderText = "SignedFullPath";
-            this.colSignedFullPath.MinimumWidth = 6;
-            this.colSignedFullPath.Name = "colSignedFullPath";
-            this.colSignedFullPath.Visible = false;
             // 
             // FrmDigitalSignature
             // 
